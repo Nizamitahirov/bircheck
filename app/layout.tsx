@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BirCheck — İş günü yoxlaması",
-  description:
-    "Excel VBA makroslarını dəqiqələrlə deyil, saniyələrlə işlədən yüksək sürətli iş günü müqayisəsi.",
+  title: "BirCheck",
+  description: "BirCheck",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

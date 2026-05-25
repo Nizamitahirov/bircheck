@@ -81,23 +81,15 @@ const { processWorkbook } = await import("../dist-smoke/processor.mjs");
 
 const res = await processWorkbook(fileLike, (s, p) => console.log(`  [${p}%] ${s}`));
 
-const out = XLSX.utils.sheet_to_json(res.workbook.Sheets.Problems, { header: 1, defval: null });
-console.log("\nProblems sheet output:");
-for (const row of out) console.log(JSON.stringify(row));
+console.log("\nProblems rows from result:");
+for (const r of res.rows) console.log(JSON.stringify(r.cells));
 
-// Expected:
-// 101: J=21, K=NETWORKDAYS(2020-01-15..2026-05-31, sunday only, no holidays) wait, hire < J2 so K = K2 - otpusk(5) = 21 → L = 0 → REMOVED
-// 102: J=23, hire < J2, K = 26 - 3 = 23 → L = 0 → REMOVED
-// 103: J=26, hire < J2, K = 26 - 0 = 26 → L = 0 → REMOVED
-// 104: J=26, hire (2026-05-20) >= J2, K = NETWORKDAYS(2026-05-20..2026-05-31, Sunday weekend) - 0
-//     2026-05-20 (Wed) thru 2026-05-31 (Sun): days = Wed,Thu,Fri,Sat,(Sun skip),Mon,Tue,Wed,Thu,Fri,Sat,(Sun skip) = 10
-//     L = 10 - 26 = -16 → KEPT
-
-const dataRows = out.slice(1);
-console.log("\nKept rows:", dataRows.length);
-console.log("Expected kept: 1 (employee 104)");
-const ok = dataRows.length === 1 && Number(dataRows[0][0]) === 104 && Number(dataRows[0][11]) === -16;
-console.log("Smoke result:", ok ? "PASS ✅" : "FAIL ❌");
+const ok =
+  res.rows.length === 1 &&
+  Number(res.rows[0].cells[0]) === 104 &&
+  Number(res.rows[0].cells[11]) === -16;
+console.log("Kept rows:", res.rows.length, "Expected: 1");
+console.log("Smoke result:", ok ? "PASS" : "FAIL");
 
 unlinkSync(tmp);
 process.exit(ok ? 0 : 1);
