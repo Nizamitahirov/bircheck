@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background:
+    radial-gradient(1200px 600px at -10% -20%, #dbe7ff 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, #e5deff 0%, transparent 55%),
+    linear-gradient(180deg, #f7f9ff 0%, #ffffff 100%);
+  min-height: 100vh;
+  color: #0f172a;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: saturate(140%) blur(12px);
+  -webkit-backdrop-filter: saturate(140%) blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.step-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+}
