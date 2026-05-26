@@ -14,8 +14,8 @@ export interface ProcessResult {
   workbook: XLSX.WorkBook;
   header: Cell[];
   rows: ProblemsRow[];
-  rowsRemoved: number;
   totalEmployees: number;
+  diffCount: number;
   durationMs: number;
 }
 
@@ -294,15 +294,12 @@ export async function processWorkbook(
     row[11] = computed - mhmdDays;
   }
 
-  onProgress("Sıfır fərqli sətirlər silinir...", 85);
-
-  const beforeCount = allRows.length;
-  const kept = allRows.filter((row) => toNumber(row[11]) !== 0);
-  const afterCount = kept.length;
-
   onProgress("Fərqin səbəbi əlavə olunur...", 92);
 
-  for (const row of kept) {
+  // Populate M for every row whose computed days are below the full month
+  // (regardless of whether the diff is zero — the file keeps all employees).
+  let diffCount = 0;
+  for (const row of allRows) {
     const key = toKey(row[0]);
     const computed = toNumber(row[10]);
     if (computed < totalWorkdays) {
@@ -311,12 +308,13 @@ export async function processWorkbook(
     } else {
       row[12] = "";
     }
+    if (toNumber(row[11]) !== 0) diffCount++;
   }
 
   // Replace MHMD sheet with cleaned version; Problems will be rebuilt on export
   wb.Sheets[SHEETS.mhmd] = XLSX.utils.aoa_to_sheet(mhmdRows);
 
-  const rows: ProblemsRow[] = kept.map((cells, idx) => ({
+  const rows: ProblemsRow[] = allRows.map((cells, idx) => ({
     id: `${toKey(cells[0]) || "row"}-${idx}`,
     cells,
   }));
@@ -327,8 +325,8 @@ export async function processWorkbook(
     workbook: wb,
     header: problemsHeader,
     rows,
-    rowsRemoved: beforeCount - afterCount,
-    totalEmployees: beforeCount,
+    totalEmployees: allRows.length,
+    diffCount,
     durationMs: performance.now() - t0,
   };
 }

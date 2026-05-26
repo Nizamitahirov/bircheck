@@ -113,15 +113,12 @@ export default function Home() {
   const stats = useMemo(() => {
     let pos = 0;
     let neg = 0;
-    let outOfRange = 0;
     for (const r of rows) {
       const d = Number(r.cells[11]) || 0;
       if (d > 0) pos++;
       else if (d < 0) neg++;
-      const abs = Math.abs(d);
-      if (abs < RANGE_MIN || abs > RANGE_MAX) outOfRange++;
     }
-    return { pos, neg, outOfRange };
+    return { pos, neg };
   }, [rows]);
 
   const fileSize = useMemo(() => (file ? formatBytes(file.size) : ""), [file]);
@@ -237,7 +234,7 @@ export default function Home() {
           <>
             <section className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
               <Stat label="İşçi sayı" value={result.totalEmployees} />
-              <Stat label="Fərq tapıldı" value={rows.length} accent="brand" />
+              <Stat label="Fərq tapıldı" value={result.diffCount} accent="brand" />
               <Stat label="Müsbət fərq" value={stats.pos} tone="amber" />
               <Stat label="Mənfi fərq" value={stats.neg} tone="rose" />
             </section>
@@ -249,26 +246,24 @@ export default function Home() {
                   <p className="text-sm text-slate-500">
                     {filterMode === "range" ? (
                       <>
-                        |Fərq| ∈ [{RANGE_MIN}; {RANGE_MAX}] · göstərilir{" "}
+                        |Fərq| ∈ [{RANGE_MIN}; {RANGE_MAX}] aralığında ·{" "}
                         <span className="font-semibold text-slate-700">
                           {visibleRows.length}
                         </span>{" "}
-                        / {rows.length}
+                        sətir göstərilir
                       </>
                     ) : (
                       <>
-                        Hamısı · göstərilir{" "}
+                        Bütün işçilər ·{" "}
                         <span className="font-semibold text-slate-700">
                           {visibleRows.length}
                         </span>{" "}
-                        / {rows.length}
+                        sətir göstərilir
                       </>
                     )}
-                    {stats.outOfRange > 0 && filterMode === "range" && (
-                      <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                        {stats.outOfRange} sətir aralıqdan kənar
-                      </span>
-                    )}
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                      Endirilən fayl: bütün {result.totalEmployees} işçi
+                    </span>
                   </p>
                 </div>
 

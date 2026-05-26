@@ -84,11 +84,14 @@ const res = await processWorkbook(fileLike, (s, p) => console.log(`  [${p}%] ${s
 console.log("\nProblems rows from result:");
 for (const r of res.rows) console.log(JSON.stringify(r.cells));
 
+// Now all 4 employees should be present (L=0 ones are NOT filtered out anymore)
+// Only employee 104 has a non-zero diff.
 const ok =
-  res.rows.length === 1 &&
-  Number(res.rows[0].cells[0]) === 104 &&
-  Number(res.rows[0].cells[11]) === -16;
-console.log("Kept rows:", res.rows.length, "Expected: 1");
+  res.rows.length === 4 &&
+  res.diffCount === 1 &&
+  res.rows.find(r => Number(r.cells[0]) === 104)?.cells[11] === -16;
+console.log("Rows:", res.rows.length, "Expected: 4");
+console.log("DiffCount:", res.diffCount, "Expected: 1");
 console.log("Smoke result:", ok ? "PASS" : "FAIL");
 
 unlinkSync(tmp);
