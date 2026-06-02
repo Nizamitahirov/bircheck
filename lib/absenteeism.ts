@@ -311,6 +311,38 @@ export async function processAbsenteeism(
   };
 }
 
-export function exportAbsenteeism(result: AbsenteeismResult, filename: string) {
-  XLSX.writeFile(result.workbook, filename, { compression: true });
+export function exportAbsenteeism(
+  result: AbsenteeismResult,
+  filename: string,
+  override?: { netice: NeticeRow[]; muqayise: MuqayiseRow[] },
+) {
+  const netice = override?.netice ?? result.netice;
+  const muqayise = override?.muqayise ?? result.muqayise;
+  const wb = result.workbook;
+
+  const neticeAoa: Row[] = [["Personal kod", "Müddət"], ...netice.map((n) => [n.code, n.total])];
+  const neticeWs = XLSX.utils.aoa_to_sheet(neticeAoa);
+  neticeWs["!cols"] = [{ wch: 16 }, { wch: 12 }];
+  wb.Sheets["Netice"] = neticeWs;
+
+  const muqayiseAoa: Row[] = [
+    ["Personal kod", "Tarix", "Növ", "Müddət"],
+    ...muqayise.map((m) => [m.code, m.dateSerial, m.type, m.weight]),
+  ];
+  const muqayiseWs = XLSX.utils.aoa_to_sheet(muqayiseAoa);
+  muqayiseWs["!cols"] = [{ wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 10 }];
+  for (let r = 1; r <= muqayise.length; r++) {
+    const addr = XLSX.utils.encode_cell({ r, c: 1 });
+    const cell = muqayiseWs[addr];
+    if (cell && typeof cell.v === "number") {
+      cell.t = "n";
+      cell.z = "dd.mm.yyyy";
+    }
+  }
+  wb.Sheets["Muqayise"] = muqayiseWs;
+  for (const name of ["Netice", "Muqayise"]) {
+    if (!wb.SheetNames.includes(name)) wb.SheetNames.push(name);
+  }
+
+  XLSX.writeFile(wb, filename, { compression: true });
 }

@@ -19,6 +19,26 @@ import {
 } from "./ui";
 
 type Status = "idle" | "processing" | "done" | "error";
+type Op = "none" | "lt" | "lte" | "eq" | "gte" | "gt" | "between";
+type SortOrder = "desc" | "asc";
+
+const OP_LABELS: Record<Op, string> = {
+  none: "Filtr yoxdur",
+  lt: "< (kiçik)",
+  lte: "≤ (kiçik və ya bərabər)",
+  eq: "= (bərabər)",
+  gte: "≥ (böyük və ya bərabər)",
+  gt: "> (böyük)",
+  between: "Aralıq (between)",
+};
+
+interface AppliedFilter {
+  op: Op;
+  val1: number | null;
+  val2: number | null;
+}
+
+const NO_FILTER: AppliedFilter = { op: "none", val1: null, val2: null };
 
 export function AbsenteeismTab() {
   const [file, setFile] = useState<File | null>(null);
@@ -30,6 +50,13 @@ export function AbsenteeismTab() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
 
+  // Filter form state
+  const [op, setOp] = useState<Op>("none");
+  const [val1Input, setVal1Input] = useState("");
+  const [val2Input, setVal2Input] = useState("");
+  const [applied, setApplied] = useState<AppliedFilter>(NO_FILTER);
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+
   const reset = () => {
     setFile(null);
     setStatus("idle");
@@ -39,6 +66,11 @@ export function AbsenteeismTab() {
     setError(null);
     setSearch("");
     setSelected(null);
+    setOp("none");
+    setVal1Input("");
+    setVal2Input("");
+    setApplied(NO_FILTER);
+    setSortOrder("desc");
   };
 
   const onPick = (f: File | null) => {
@@ -71,23 +103,67 @@ export function AbsenteeismTab() {
     }
   }, [file]);
 
-  const download = () => {
-    if (!result) return;
-    const base = file?.name?.replace(/\.(xlsx|xlsm|xls)$/i, "") ?? "BirCheck";
-    exportAbsenteeism(result, `${base}_absenteeism.xlsx`);
+  const applyFilter = () => {
+    if (op === "none") {
+      setApplied(NO_FILTER);
+      return;
+    }
+    const v1 = val1Input.trim() === "" ? null : Number(val1Input);
+    const v2 = val2Input.trim() === "" ? null : Number(val2Input);
+    setApplied({ op, val1: v1, val2: v2 });
+  };
+
+  const clearFilter = () => {
+    setOp("none");
+    setVal1Input("");
+    setVal2Input("");
+    setApplied(NO_FILTER);
   };
 
   const visibleNetice = useMemo(() => {
     if (!result) return [] as NeticeRow[];
     let list = result.netice;
+
+    if (applied.op !== "none") {
+      const a = applied.val1;
+      const b = applied.val2;
+      list = list.filter((r) => {
+        const t = r.total;
+        switch (applied.op) {
+          case "lt":
+            return a !== null && t < a;
+          case "lte":
+            return a !== null && t <= a;
+          case "eq":
+            return a !== null && t === a;
+          case "gte":
+            return a !== null && t >= a;
+          case "gt":
+            return a !== null && t > a;
+          case "between": {
+            if (a === null || b === null) return true;
+            const lo = Math.min(a, b);
+            const hi = Math.max(a, b);
+            return t >= lo && t <= hi;
+          }
+          default:
+            return true;
+        }
+      });
+    }
+
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       list = list.filter(
         (r) => r.code.toLowerCase().includes(q) || r.name.toLowerCase().includes(q),
       );
     }
-    return list;
-  }, [result, search]);
+
+    const sorted = [...list].sort((x, y) =>
+      sortOrder === "desc" ? y.total - x.total : x.total - y.total,
+    );
+    return sorted;
+  }, [result, applied, search, sortOrder]);
 
   const stats = useMemo(() => {
     if (!result) return { withAny: 0, totalSum: 0, max: 0 };
@@ -106,6 +182,24 @@ export function AbsenteeismTab() {
     if (!result || !selected) return [];
     return result.muqayise.filter((m) => m.code === selected);
   }, [result, selected]);
+
+  const fileBase = () => file?.name?.replace(/\.(xlsx|xlsm|xls)$/i, "") ?? "BirCheck";
+
+  const exportSelected = () => {
+    if (!result) return;
+    const codes = new Set(visibleNetice.map((n) => n.code));
+    exportAbsenteeism(result, `${fileBase()}_absenteeism_selected.xlsx`, {
+      netice: visibleNetice,
+      muqayise: result.muqayise.filter((m) => codes.has(m.code)),
+    });
+  };
+
+  const exportAll = () => {
+    if (!result) return;
+    exportAbsenteeism(result, `${fileBase()}_absenteeism.xlsx`);
+  };
+
+  const filterActive = applied.op !== "none";
 
   return (
     <>
@@ -170,32 +264,122 @@ export function AbsenteeismTab() {
           </section>
 
           <section className="glass mt-6 rounded-3xl p-4 shadow-soft md:p-6">
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">Nəticə</h2>
-                <p className="text-sm text-slate-500">
-                  Aralıq:{" "}
-                  <span className="font-semibold text-slate-700">
-                    {formatExcelDate(result.periodStart)} – {formatExcelDate(result.periodEnd)}
-                  </span>{" "}
-                  · <span className="font-semibold text-slate-700">{visibleNetice.length}</span>{" "}
-                  işçi göstərilir
-                </p>
+            <div className="mb-4 flex flex-col gap-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Nəticə</h2>
+                  <p className="text-sm text-slate-500">
+                    Aralıq:{" "}
+                    <span className="font-semibold text-slate-700">
+                      {formatExcelDate(result.periodStart)} – {formatExcelDate(result.periodEnd)}
+                    </span>{" "}
+                    · <span className="font-semibold text-slate-700">{visibleNetice.length}</span>{" "}
+                    / {result.totalEmployees} işçi
+                    {filterActive && (
+                      <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 ring-1 ring-inset ring-brand-200">
+                        Aktiv filtr: müddət {filterDescription(applied)}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={exportSelected}
+                    disabled={visibleNetice.length === 0}
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    <DownloadIcon /> Export selected ({visibleNetice.length})
+                  </button>
+                  <button
+                    onClick={exportAll}
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-600 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                  >
+                    <DownloadIcon /> Export all ({result.totalEmployees})
+                  </button>
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Axtar (kod, ad)"
-                  className="w-56 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
-                />
-                <button
-                  onClick={download}
-                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-700"
-                >
-                  <DownloadIcon /> Endir (.xlsx)
-                </button>
+              <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-3">
+                <Field label="Axtar">
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Kod və ya ad"
+                    className="w-52 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                  />
+                </Field>
+
+                <Field label="Müddət filtri">
+                  <select
+                    value={op}
+                    onChange={(e) => setOp(e.target.value as Op)}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                  >
+                    {(Object.keys(OP_LABELS) as Op[]).map((o) => (
+                      <option key={o} value={o}>
+                        {OP_LABELS[o]}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                {op !== "none" && (
+                  <Field label={op === "between" ? "Min" : "Dəyər"}>
+                    <input
+                      type="number"
+                      value={val1Input}
+                      onChange={(e) => setVal1Input(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") applyFilter();
+                      }}
+                      placeholder="0"
+                      className="w-24 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                    />
+                  </Field>
+                )}
+
+                {op === "between" && (
+                  <Field label="Max">
+                    <input
+                      type="number"
+                      value={val2Input}
+                      onChange={(e) => setVal2Input(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") applyFilter();
+                      }}
+                      placeholder="0"
+                      className="w-24 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                    />
+                  </Field>
+                )}
+
+                <Field label="Sıralama">
+                  <select
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                  >
+                    <option value="desc">Largest → smallest</option>
+                    <option value="asc">Smallest → largest</option>
+                  </select>
+                </Field>
+
+                <div className="flex items-center gap-2 self-end">
+                  <button
+                    onClick={applyFilter}
+                    disabled={op === "none"}
+                    className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    Tətbiq et
+                  </button>
+                  <button
+                    onClick={clearFilter}
+                    disabled={!filterActive && op === "none"}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Sıfırla
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -214,7 +398,7 @@ export function AbsenteeismTab() {
                     {visibleNetice.length === 0 ? (
                       <tr>
                         <td colSpan={4} className="px-3 py-10 text-center text-sm text-slate-400">
-                          Heç nə tapılmadı.
+                          Bu filtrə uyğun sətir yoxdur.
                         </td>
                       </tr>
                     ) : (
@@ -309,4 +493,34 @@ export function AbsenteeismTab() {
       )}
     </>
   );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1 text-xs font-medium text-slate-500">
+      {label}
+      {children}
+    </label>
+  );
+}
+
+function filterDescription(f: AppliedFilter): string {
+  const a = f.val1 ?? "?";
+  const b = f.val2 ?? "?";
+  switch (f.op) {
+    case "lt":
+      return `< ${a}`;
+    case "lte":
+      return `≤ ${a}`;
+    case "eq":
+      return `= ${a}`;
+    case "gte":
+      return `≥ ${a}`;
+    case "gt":
+      return `> ${a}`;
+    case "between":
+      return `∈ [${Math.min(Number(a), Number(b))}; ${Math.max(Number(a), Number(b))}]`;
+    default:
+      return "";
+  }
 }
