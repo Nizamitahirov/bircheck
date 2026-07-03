@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { WorkingDaysTab } from "@/components/WorkingDaysTab";
 import { AbsenteeismTab } from "@/components/AbsenteeismTab";
+import { ReplacementTab } from "@/components/ReplacementTab";
 
-type Tab = "working" | "absent";
+type Tab = "working" | "absent" | "replacement";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "working", label: "Working days check" },
   { id: "absent", label: "Absenteeism" },
+  { id: "replacement", label: "Replacement check" },
 ];
 
 export default function Home() {
@@ -41,7 +43,13 @@ export default function Home() {
           </div>
         </nav>
 
-        {tab === "working" ? <WorkingDaysTab /> : <AbsenteeismTab />}
+        {tab === "working" ? (
+          <WorkingDaysTab />
+        ) : tab === "absent" ? (
+          <AbsenteeismTab />
+        ) : (
+          <ReplacementTab />
+        )}
 
         <footer className="mt-12 text-center text-xs text-slate-400">
           Copyright created by Nizami Tahir
