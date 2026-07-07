@@ -4,13 +4,15 @@ import { useState } from "react";
 import { WorkingDaysTab } from "@/components/WorkingDaysTab";
 import { AbsenteeismTab } from "@/components/AbsenteeismTab";
 import { ReplacementTab } from "@/components/ReplacementTab";
+import { VacationWorkyearTab } from "@/components/VacationWorkyearTab";
 
-type Tab = "working" | "absent" | "replacement";
+type Tab = "working" | "absent" | "replacement" | "workyear";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "working", label: "Working days check" },
   { id: "absent", label: "Absenteeism" },
   { id: "replacement", label: "Replacement check" },
+  { id: "workyear", label: "Vacation by Workyear" },
 ];
 
 export default function Home() {
@@ -47,8 +49,10 @@ export default function Home() {
           <WorkingDaysTab />
         ) : tab === "absent" ? (
           <AbsenteeismTab />
-        ) : (
+        ) : tab === "replacement" ? (
           <ReplacementTab />
+        ) : (
+          <VacationWorkyearTab />
         )}
 
         <footer className="mt-12 text-center text-xs text-slate-400">
