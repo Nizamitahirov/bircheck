@@ -241,6 +241,10 @@ export async function processWorkyear(
   onProgress("Addım 2: İllik normalar lüğəti (rehire filtri ilə)...", 30);
   const yearSheets = wb.SheetNames.filter((n) => /^\d{4}$/.test(n.trim())).sort();
   const norms = new Map<string, Map<number, YearNorm>>(); // empKey → il → norma
+  // İllik səhifələrdə əvvəlki iş dövrünə aid sətirləri olan (rehire) əməkdaşlar —
+  // onların "Used" qeydləri ləğvetmə/kompensasiya daşıya bildiyindən uzlaşma
+  // yoxlamasında ayrıca sayılırlar (alqoritmə təsir etmir, yalnız validasiyaya).
+  const rehireAffected = new Set<string>();
 
   for (const sn of yearSheets) {
     const year = parseInt(sn.trim(), 10);
@@ -271,10 +275,17 @@ export async function processWorkyear(
       const matched = emp.hire !== null ? list.filter((c) => c.start !== null && c.start === emp.hire) : [];
       const chosen = matched.length ? matched[0] : list[0];
       if (!matched.length && emp.hire !== null && list.some((c) => c.start !== null)) {
-        log("Rehire fallback", emp.name, `${sn} səhifəsində master işə qəbul tarixinə (${fmtDate(emp.hire)}) uyğun sətir yoxdur — mövcud sətir fallback kimi götürüldü.`);
+        rehireAffected.add(emp.key);
+        log("Rehire fallback", emp.name, `${sn} səhifəsində master işə qəbul tarixinə (${fmtDate(emp.hire)}) uyğun sətir yoxdur — norma fallback kimi götürüldü, "Used" isə uzlaşma yoxlamasına daxil edilmir (əvvəlki iş dövrünə aiddir).`);
       }
+      // Rehire ili: cari sətrin özündə əvvəlki iş dövrünün ləğvetmə/kompensasiya
+      // qeydləri ola bilər — belə əməkdaşlar uzlaşma bazasından ayrılır.
+      if (list.length > matched.length) rehireAffected.add(emp.key);
       const m = norms.get(key) ?? new Map<number, YearNorm>();
-      m.set(year, chosen.norm);
+      // "used" yalnız cari iş dövrünün (Start == master Start) sətirlərindən götürülür:
+      // fallback sətirin "Used" dəyəri əvvəlki iş dövrünə (rehire) aid olduğundan
+      // uzlaşma yoxlamasında istifadə edilməməlidir — norma (main/add) isə qalır.
+      m.set(year, { ...chosen.norm, used: matched.length ? chosen.norm.used : null });
       norms.set(key, m);
     }
   }
@@ -457,8 +468,14 @@ export async function processWorkyear(
   });
 
   // 2. İllik səhifə uzlaşması (≥95%)
+  // Uzlaşma yalnız "təmiz" bazada ölçülür: illik səhifələrdə əvvəlki iş dövrünə
+  // aid sətirləri OLMAYAN əməkdaşlar. Rehire-təsirli əməkdaşların illik "Used"
+  // qeydləri əvvəlki iş dövrünün ləğvetmə/kompensasiyasını ehtiva etdiyindən
+  // əmrlərlə üst-üstə düşməsi gözlənilmir — onlar ayrıca, informativ sayılır.
   let cmp = 0;
   let match = 0;
+  let cmpRehire = 0;
+  let matchRehire = 0;
   for (const emp of employees) {
     const ym = norms.get(emp.key);
     if (!ym) continue;
@@ -471,16 +488,28 @@ export async function processWorkyear(
       }
     }
     if (!any) continue;
-    cmp++;
+    const isRehire = rehireAffected.has(emp.key);
     const used = usedByEmp.get(emp.key) ?? 0;
-    if (Math.abs(used - yearUsed) < 0.01) match++;
-    else log("Used uzlaşmır", emp.name, `Əmrlərdən istifadə ${used}, illik səhifələrin "Used" cəmi ${yearUsed} (fərq ${Math.round((used - yearUsed) * 100) / 100}).`);
+    const ok = Math.abs(used - yearUsed) < 0.01;
+    if (isRehire) {
+      cmpRehire++;
+      if (ok) matchRehire++;
+    } else {
+      cmp++;
+      if (ok) match++;
+    }
+    if (!ok)
+      log(
+        isRehire ? "Used uzlaşmır (rehire)" : "Used uzlaşmır",
+        emp.name,
+        `Əmrlərdən istifadə ${used}, illik səhifələrin "Used" cəmi ${yearUsed} (fərq ${Math.round((used - yearUsed) * 100) / 100})${isRehire ? " — əməkdaş rehire-təsirlidir, fərq əvvəlki iş dövrünün ləğvetmə qeydlərindən qaynaqlana bilər" : ""}.`,
+      );
   }
   const matchPct = cmp ? Math.round((match / cmp) * 10000) / 100 : 100;
   checks.push({
     name: "İllik səhifə uzlaşması",
     ok: matchPct >= 95,
-    detail: `${cmp} əməkdaşdan ${match} uyğundur (${matchPct}%; tələb ≥95%). Fərqlər anomaliya loqundadır (əsas səbəb: rehire kompensasiya qeydləri).`,
+    detail: `Təmiz bazada ${cmp} əməkdaşdan ${match} uyğundur (${matchPct}%; tələb ≥95%). Rehire-təsirli ${cmpRehire} əməkdaşdan ${matchRehire} uyğundur (informativ — əvvəlki iş dövrünün ləğvetmə/kompensasiya qeydləri əmrlərdə olmur). Fərqlər anomaliya loqundadır.`,
     hard: true,
   });
 
