@@ -8,6 +8,7 @@ export type Row = Cell[];
 export interface ProblemsRow {
   id: string;
   cells: Cell[];
+  is6Day: boolean;
 }
 
 export interface ProcessResult {
@@ -202,6 +203,14 @@ export async function processWorkbook(
     if (vL !== null) holidays6Day.add(vL);
   }
 
+  // M2 = "Ayda iş günlərinin sayı - 6 günlük", formula
+  // =(DAYS(J3;J2)+1)-COUNT($L$2:$L$29). For 6-day workers this is the monthly
+  // workday count. Prefer the cell value (Excel may have cached it); otherwise
+  // compute it from the period length and the L holiday list.
+  const m2Cell = toNumber(getCell(otpuskRows, 1, 12)); // M2
+  const totalWorkdays6Day =
+    m2Cell > 0 ? m2Cell : periodEnd - periodStart + 1 - holidays6Day.size;
+
   onProgress("MHMD məlumatları təmizlənir...", 15);
 
   // Drop MHMD rows outside the period
@@ -276,7 +285,10 @@ export async function processWorkbook(
 
   onProgress("Fərqlər hesablanır...", 75);
 
-  for (const row of allRows) {
+  const flags: boolean[] = new Array(allRows.length).fill(false);
+
+  for (let idx = 0; idx < allRows.length; idx++) {
+    const row = allRows[idx];
     const key = toKey(row[0]);
     if (!key) continue;
     const mhmdDays = mhmdSum.get(key) ?? 0;
@@ -284,42 +296,45 @@ export async function processWorkbook(
     const hireDate = asExcelSerial(row[7]);
 
     // Column I in Baza = İş qrafiki. Employees whose schedule starts with
-    // "6 günlük iş" use the L column of otpusk for non-work days; everyone
-    // else keeps using the I column.
+    // "6 günlük iş" use the L column of otpusk for non-work days and the M2
+    // workday total; everyone else keeps using the I column and K2.
     const schedule = String(row[8] ?? "")
       .toLowerCase()
       .replace(/\s+/g, " ")
       .trim();
-    const holidays = schedule.startsWith("6 günlük iş") ? holidays6Day : holidaysDefault;
+    const is6Day = schedule.startsWith("6 günlük iş");
+    flags[idx] = is6Day;
+
+    const holidays = is6Day ? holidays6Day : holidaysDefault;
+    const monthWorkdays = is6Day ? totalWorkdays6Day : totalWorkdays;
 
     let computed: number;
     if (hireDate !== null && hireDate < periodStart) {
-      computed = totalWorkdays - otpuskTotal;
+      computed = monthWorkdays - otpuskTotal;
     } else if (hireDate !== null) {
       computed = networkDaysIntl(hireDate, periodEnd, holidays) - otpuskTotal;
     } else {
-      computed = totalWorkdays - otpuskTotal;
+      computed = monthWorkdays - otpuskTotal;
     }
 
     row[9] = mhmdDays;
     row[10] = computed;
     row[11] = computed - mhmdDays;
-  }
 
-  onProgress("Fərqin səbəbi əlavə olunur...", 92);
-
-  // Populate M for every row whose computed days are below the full month
-  // (regardless of whether the diff is zero — the file keeps all employees).
-  let diffCount = 0;
-  for (const row of allRows) {
-    const key = toKey(row[0]);
-    const computed = toNumber(row[10]);
-    if (computed < totalWorkdays) {
+    // Fərqin səbəbi: fill when computed days fall below this employee's own
+    // full month (K2 for regular, M2 for 6-day workers).
+    if (computed < monthWorkdays) {
       const details = otpuskDetails.get(key);
       row[12] = details && details.length ? details.join("") : "";
     } else {
       row[12] = "";
     }
+  }
+
+  onProgress("Fərqin səbəbi əlavə olunur...", 92);
+
+  let diffCount = 0;
+  for (const row of allRows) {
     if (toNumber(row[11]) !== 0) diffCount++;
   }
 
@@ -329,6 +344,7 @@ export async function processWorkbook(
   const rows: ProblemsRow[] = allRows.map((cells, idx) => ({
     id: `${toKey(cells[0]) || "row"}-${idx}`,
     cells,
+    is6Day: flags[idx],
   }));
 
   onProgress("Tamamlandı", 100);

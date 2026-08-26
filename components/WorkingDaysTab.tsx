@@ -21,7 +21,8 @@ import {
 } from "./ui";
 
 type Status = "idle" | "processing" | "done" | "error";
-type FilterMode = "range" | "all";
+type DiffMode = "range" | "all";
+type SchedMode = "all" | "six" | "regular";
 
 const RANGE_MIN = 1;
 const RANGE_MAX = 31;
@@ -34,7 +35,8 @@ export function WorkingDaysTab() {
   const [result, setResult] = useState<ProcessResult | null>(null);
   const [rows, setRows] = useState<ProblemsRow[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [filterMode, setFilterMode] = useState<FilterMode>("range");
+  const [diffMode, setDiffMode] = useState<DiffMode>("range");
+  const [schedMode, setSchedMode] = useState<SchedMode>("all");
   const [search, setSearch] = useState("");
 
   const reset = () => {
@@ -46,6 +48,8 @@ export function WorkingDaysTab() {
     setRows([]);
     setError(null);
     setSearch("");
+    setDiffMode("range");
+    setSchedMode("all");
   };
 
   const onPick = (f: File | null) => {
@@ -79,10 +83,16 @@ export function WorkingDaysTab() {
     }
   }, [file]);
 
-  const download = () => {
+  const fileBase = () => file?.name?.replace(/\.(xlsx|xlsm|xls)$/i, "") ?? "BirCheck";
+
+  const exportAll = () => {
     if (!result) return;
-    const base = file?.name?.replace(/\.(xlsx|xlsm|xls)$/i, "") ?? "BirCheck";
-    exportResult(result, rows, `${base}_yoxlanilmis.xlsx`);
+    exportResult(result, rows, `${fileBase()}_yoxlanilmis.xlsx`);
+  };
+
+  const exportSelected = () => {
+    if (!result) return;
+    exportResult(result, visibleRows, `${fileBase()}_secilmis.xlsx`);
   };
 
   const updateReason = useCallback((id: string, value: string) => {
@@ -95,12 +105,14 @@ export function WorkingDaysTab() {
 
   const visibleRows = useMemo(() => {
     let list = rows;
-    if (filterMode === "range") {
+    if (diffMode === "range") {
       list = list.filter((r) => {
         const d = Math.abs(Number(r.cells[11]) || 0);
         return d >= RANGE_MIN && d <= RANGE_MAX;
       });
     }
+    if (schedMode === "six") list = list.filter((r) => r.is6Day);
+    else if (schedMode === "regular") list = list.filter((r) => !r.is6Day);
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       list = list.filter((r) => {
@@ -111,17 +123,19 @@ export function WorkingDaysTab() {
       });
     }
     return list;
-  }, [rows, filterMode, search]);
+  }, [rows, diffMode, schedMode, search]);
 
   const stats = useMemo(() => {
     let pos = 0;
     let neg = 0;
+    let six = 0;
     for (const r of rows) {
       const d = Number(r.cells[11]) || 0;
       if (d > 0) pos++;
       else if (d < 0) neg++;
+      if (r.is6Day) six++;
     }
-    return { pos, neg };
+    return { pos, neg, six };
   }, [rows]);
 
   return (
@@ -189,54 +203,83 @@ export function WorkingDaysTab() {
           </section>
 
           <section className="glass mt-6 rounded-3xl p-4 shadow-soft md:p-6">
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            {/* Header: title + export actions */}
+            <div className="flex flex-col gap-4 border-b border-slate-200/70 pb-4 md:flex-row md:items-start md:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Fərqlər</h2>
-                <p className="text-sm text-slate-500">
-                  {filterMode === "range" ? (
-                    <>
-                      |Fərq| ∈ [{RANGE_MIN}; {RANGE_MAX}] aralığında ·{" "}
-                      <span className="font-semibold text-slate-700">{visibleRows.length}</span>{" "}
-                      sətir göstərilir
-                    </>
-                  ) : (
-                    <>
-                      Bütün işçilər ·{" "}
-                      <span className="font-semibold text-slate-700">{visibleRows.length}</span>{" "}
-                      sətir göstərilir
-                    </>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  <span className="font-semibold text-slate-700">{visibleRows.length}</span> /{" "}
+                  {result.totalEmployees} işçi göstərilir
+                  {stats.six > 0 && (
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200">
+                      6 günlük: {stats.six}
+                    </span>
                   )}
-                  <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                    Endirilən fayl: bütün {result.totalEmployees} işçi
-                  </span>
                 </p>
               </div>
-
               <div className="flex flex-wrap items-center gap-2">
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Axtar (kod, ad, soyad)"
-                  className="w-56 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
-                />
-                <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 text-sm shadow-sm">
-                  <SegmentBtn active={filterMode === "range"} onClick={() => setFilterMode("range")}>
-                    1–31 aralığı
-                  </SegmentBtn>
-                  <SegmentBtn active={filterMode === "all"} onClick={() => setFilterMode("all")}>
-                    Hamısı
-                  </SegmentBtn>
-                </div>
                 <button
-                  onClick={download}
+                  onClick={exportSelected}
+                  disabled={visibleRows.length === 0}
+                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-600 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                >
+                  <DownloadIcon /> Seçilmişi endir ({visibleRows.length})
+                </button>
+                <button
+                  onClick={exportAll}
                   className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-700"
                 >
-                  <DownloadIcon /> Hamısını endir (.xlsx)
+                  <DownloadIcon /> Hamısını endir ({result.totalEmployees})
                 </button>
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+            {/* Filter toolbar */}
+            <div className="mt-4 flex flex-wrap items-end gap-x-5 gap-y-3">
+              <label className="flex flex-col gap-1 text-xs font-medium text-slate-500">
+                Axtar
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    <SearchIcon />
+                  </span>
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Kod, ad, soyad"
+                    className="w-60 rounded-lg border border-slate-200 bg-white py-1.5 pl-9 pr-3 text-sm shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                  />
+                </div>
+              </label>
+
+              <label className="flex flex-col gap-1 text-xs font-medium text-slate-500">
+                Fərq
+                <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+                  <SegmentBtn active={diffMode === "range"} onClick={() => setDiffMode("range")}>
+                    1–31 aralığı
+                  </SegmentBtn>
+                  <SegmentBtn active={diffMode === "all"} onClick={() => setDiffMode("all")}>
+                    Hamısı
+                  </SegmentBtn>
+                </div>
+              </label>
+
+              <label className="flex flex-col gap-1 text-xs font-medium text-slate-500">
+                İş rejimi
+                <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+                  <SegmentBtn active={schedMode === "all"} onClick={() => setSchedMode("all")}>
+                    Hamısı
+                  </SegmentBtn>
+                  <SegmentBtn active={schedMode === "six"} onClick={() => setSchedMode("six")}>
+                    6 günlük
+                  </SegmentBtn>
+                  <SegmentBtn active={schedMode === "regular"} onClick={() => setSchedMode("regular")}>
+                    Digər
+                  </SegmentBtn>
+                </div>
+              </label>
+            </div>
+
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
               <table className="min-w-full divide-y divide-slate-200 text-sm">
                 <thead className="bg-slate-50">
                   <tr className="text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -309,8 +352,15 @@ function RowItem({
       <td className="px-3 py-2 tabular-nums text-slate-400">{index}</td>
       <td className="px-3 py-2 font-medium tabular-nums text-slate-700">{String(c[0] ?? "")}</td>
       <td className="px-3 py-2 text-slate-900">
-        <div className="font-medium">
-          {surname} {name}
+        <div className="flex items-center gap-2">
+          <span className="font-medium">
+            {surname} {name}
+          </span>
+          {row.is6Day && (
+            <span className="inline-flex flex-shrink-0 items-center rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700 ring-1 ring-inset ring-indigo-200">
+              6 günlük
+            </span>
+          )}
         </div>
       </td>
       <td className="px-3 py-2 text-slate-600">{String(c[4] ?? "")}</td>
@@ -337,5 +387,22 @@ function RowItem({
         />
       </td>
     </tr>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
   );
 }
