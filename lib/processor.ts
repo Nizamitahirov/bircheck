@@ -53,7 +53,7 @@ const DEFAULT_HEADER: Cell[] = [
   "Departament",
   "Filial",
   "İşə qəbul tarixi",
-  "Status",
+  "İş qrafiki",
   "MHMD iş günü",
   "İş günü Bizdə olan",
   "Fərq",
@@ -193,10 +193,13 @@ export async function processWorkbook(
     throw new Error("From_HRB_Otpusk sheet-də K2 (ümumi iş günü) doldurulmalıdır.");
   }
 
-  const holidays = new Set<number>();
+  const holidaysDefault = new Set<number>();
+  const holidays6Day = new Set<number>();
   for (let r = 1; r <= 28; r++) {
-    const v = asExcelSerial(getCell(otpuskRows, r, 8));
-    if (v !== null) holidays.add(v);
+    const vI = asExcelSerial(getCell(otpuskRows, r, 8)); // I column
+    if (vI !== null) holidaysDefault.add(vI);
+    const vL = asExcelSerial(getCell(otpuskRows, r, 11)); // L column — "Qeyri-iş günləri cari ay - 6 günlük"
+    if (vL !== null) holidays6Day.add(vL);
   }
 
   onProgress("MHMD məlumatları təmizlənir...", 15);
@@ -279,6 +282,15 @@ export async function processWorkbook(
     const mhmdDays = mhmdSum.get(key) ?? 0;
     const otpuskTotal = otpuskSum.get(key) ?? 0;
     const hireDate = asExcelSerial(row[7]);
+
+    // Column I in Baza = İş qrafiki. Employees whose schedule starts with
+    // "6 günlük iş" use the L column of otpusk for non-work days; everyone
+    // else keeps using the I column.
+    const schedule = String(row[8] ?? "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+    const holidays = schedule.startsWith("6 günlük iş") ? holidays6Day : holidaysDefault;
 
     let computed: number;
     if (hireDate !== null && hireDate < periodStart) {
