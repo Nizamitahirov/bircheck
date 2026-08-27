@@ -214,32 +214,24 @@ export async function processCrossCheck(
 
 // Result sheet: one row per unique Employee Badge.
 //   A = Emp Badge
-//   B = Kəsişən tarixlər (one order's range per line, in a single cell)
-//   C = Kəsişən gün sayı (aligned per line)
-//   D = Əmrin növü (aligned per line)
-//   E = Status ("N Kəsişmə")
+//   B = Kəsişən tarixlər — one order per line: "05.06.2026 – 10.06.2026 | Növ"
+//   C = Status ("N Kəsişmə")
 function buildResultSheet(groups: CrossGroup[]): XLSX.WorkSheet {
-  const aoa: Row[] = [
-    ["Emp Badge", "Kəsişən tarixlər", "Kəsişən gün sayı", "Əmrin növü", "Status"],
-  ];
+  const aoa: Row[] = [["Emp Badge", "Kəsişən tarixlər", "Status"]];
   for (const g of groups) {
-    const dateLines = g.orders
-      .map((o) => `${formatSerial(o.start)} – ${formatSerial(o.end)}`)
+    const lines = g.orders
+      .map((o) => `${formatSerial(o.start)} – ${formatSerial(o.end)} | ${o.type || "—"}`)
       .join("\n");
-    const dayLines = g.orders.map((o) => String(o.crossingDays)).join("\n");
-    const typeLines = g.orders.map((o) => o.type || "—").join("\n");
-    aoa.push([g.code, dateLines, dayLines, typeLines, `${g.pairs.length} Kəsişmə`]);
+    aoa.push([g.code, lines, `${g.pairs.length} Kəsişmə`]);
   }
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = [{ wch: 14 }, { wch: 30 }, { wch: 16 }, { wch: 28 }, { wch: 14 }];
-  // Enable wrap so the multi-line cells display as separate lines in Excel.
+  ws["!cols"] = [{ wch: 14 }, { wch: 48 }, { wch: 14 }];
+  // Enable wrap so the multi-line cell displays as separate lines in Excel.
   const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
   for (let r = 1; r <= range.e.r; r++) {
-    for (const c of [1, 2, 3]) {
-      const addr = XLSX.utils.encode_cell({ r, c });
-      const cell = ws[addr];
-      if (cell) cell.s = { alignment: { wrapText: true, vertical: "top" } };
-    }
+    const addr = XLSX.utils.encode_cell({ r, c: 1 });
+    const cell = ws[addr];
+    if (cell) cell.s = { alignment: { wrapText: true, vertical: "top" } };
   }
   return ws;
 }
