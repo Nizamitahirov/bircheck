@@ -3,12 +3,14 @@
 import { FormEvent, useEffect, useState } from "react";
 import { WorkingDaysTab } from "@/components/WorkingDaysTab";
 import { AbsenteeismTab } from "@/components/AbsenteeismTab";
+import { CrossCheckTab } from "@/components/CrossCheckTab";
 
-type Tab = "working" | "absent";
+type Tab = "working" | "absent" | "cross";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "working", label: "Working days check" },
   { id: "absent", label: "Absenteeism" },
+  { id: "cross", label: "Cross-checking" },
 ];
 
 const APP_PASSWORD = "Payroll";
@@ -70,7 +72,9 @@ export default function Home() {
           </div>
         </nav>
 
-        {tab === "working" ? <WorkingDaysTab /> : <AbsenteeismTab />}
+        {tab === "working" && <WorkingDaysTab />}
+        {tab === "absent" && <AbsenteeismTab />}
+        {tab === "cross" && <CrossCheckTab />}
 
         <footer className="mt-12 text-center text-xs text-slate-400">
           Copyright created by Nizami Tahir

@@ -1,12 +1,18 @@
 # BirCheck
 
-Excel VBA makroslarının web variantı — iş günü və mezuniyyət fərqlərinin yoxlanılması. Əvvəlcə 2 saat çəkən hesablama indi bir neçə saniyəyə tamamlanır.
+Excel VBA makroslarının web variantı — iş günü, davamiyyət və kəsişən əmrlərin yoxlanılması. Əvvəlcə saatlarla çəkən hesablamalar indi bir neçə saniyəyə tamamlanır.
+
+Platforma parol ilə qorunur (`Payroll`) və üç tabdan ibarətdir:
+
+- **Working days check** — MHMD ilə HR iş günlərinin müqayisəsi
+- **Absenteeism** — son 63 gün üzrə davamiyyət hesablaması
+- **Cross-checking** — eyni işçidə tarixləri kəsişən əmrlərin aşkarlanması
 
 ## Necə işləyir
 
 Tamamilə **brauzerdə** işləyir (client-side). Excel faylı serverə yüklənmir, bütün hesablama istifadəçinin kompüterində aparılır. Vercel sadəcə static fayllar serve edir.
 
-### Tələb olunan Excel strukturu
+### Working days check — tələb olunan Excel strukturu
 
 Bir fayl, 4 sheet:
 
@@ -27,8 +33,18 @@ Bir fayl, 4 sheet:
      - **6 günlük iş** rejimində (Baza I sütunu "6 günlük iş" ilə başlayır): bayramlar = `L2:L29`, ay iş günü = `M2`
      - digər işçilər: bayramlar = `I2:I29`, ay iş günü = `K2`
    - **L** = K - J
-4. L=0 olan sətirlər silinir
-5. K < K2 olanlara `From_HRB_Otpusk`-dan mezuniyyət detalları əlavə olunur (M)
+4. Fərqi 0 olan sətirlər interfeysdə gizlənir (fayla hamısı daxil olur)
+5. K < ay iş günü olanlara `From_HRB_Otpusk`-dan məzuniyyət detalları əlavə olunur (M)
+
+## Cross-checking — kəsişən əmrlər
+
+Bir sheet (`Dates` və ya ilk sheet), sütunlar: **A**=Personal kod, **B**=Növ, **C**=Tarixdən, **D**=Tarixə.
+
+Eyni işçi (Personal kod) üzrə tarix aralıqları kəsişən (üst-üstə düşən və ya sərhəd günü paylaşan) əmr cütləri tapılır. Nəticə unikal işçi (Employee Badge) üzrə qruplaşdırılır və hər cütün statusları (Növ) ilə tarixləri göstərilir. `NETWORKDAYS` deyil, sadə interval kəsişməsi: `start₁ ≤ end₂ AND start₂ ≤ end₁`. Yalnız kəsişən caseler göstərilir; nəticə Excel-ə export oluna bilər.
+
+## Absenteeism — davamiyyət
+
+Bir sheet (`Data`), sütunlar: A=Personal kod, C=Növ kodu, E=Başlama, F=Bitmə. Son 63 gün aralığında hər işçi üzrə davamiyyət müddəti hesablanır (42/29 növləri atılır, 30/32 üçün xüsusi çəki, zəncir filtri). Gün üzrə filtr (`<`, `≤`, `=`, `≥`, `>`, aralıq), sıralama və seçilmiş/hamısı export.
 
 ## Lokal işlətmək
 
