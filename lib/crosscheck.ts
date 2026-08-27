@@ -10,6 +10,11 @@ export interface Order {
   end: number; // excel serial
 }
 
+// A distinct crossing order plus how many of its days overlap other orders.
+export interface GroupOrder extends Order {
+  crossingDays: number;
+}
+
 export interface CrossPair {
   code: string;
   a: Order;
@@ -19,7 +24,7 @@ export interface CrossPair {
 export interface CrossGroup {
   code: string;
   pairs: CrossPair[];
-  orders: Order[]; // distinct orders involved in any crossing, sorted by start
+  orders: GroupOrder[]; // distinct orders involved in any crossing, sorted by start
 }
 
 export interface CrossResult {
@@ -173,7 +178,19 @@ export async function processCrossCheck(
       const distinct = Array.from(involved.values()).sort(
         (a, b) => a.start - b.start || a.end - b.end,
       );
-      groups.push({ code, pairs, orders: distinct });
+      // For each distinct order, count the union of its days that overlap any
+      // other crossing order of the same employee (touching day counts as 1).
+      const enriched: GroupOrder[] = distinct.map((o) => {
+        const covered = new Set<number>();
+        for (const p of distinct) {
+          if (p === o) continue;
+          const lo = Math.max(o.start, p.start);
+          const hi = Math.min(o.end, p.end);
+          for (let d = lo; d <= hi; d++) covered.add(d);
+        }
+        return { ...o, crossingDays: covered.size };
+      });
+      groups.push({ code, pairs, orders: enriched });
     }
   }
 
@@ -197,23 +214,28 @@ export async function processCrossCheck(
 
 // Result sheet: one row per unique Employee Badge.
 //   A = Emp Badge
-//   B = Kəsişən əmrlər və tarixləri (one order per line, in a single cell)
-//   C = Status (aligned, one status per line)
+//   B = Kəsişən tarixlər (one order's range per line, in a single cell)
+//   C = Kəsişən gün sayı (aligned per line)
+//   D = Əmrin növü (aligned per line)
+//   E = Status ("N Kəsişmə")
 function buildResultSheet(groups: CrossGroup[]): XLSX.WorkSheet {
-  const aoa: Row[] = [["Emp Badge", "Kəsişən əmrlər və tarixləri", "Status"]];
+  const aoa: Row[] = [
+    ["Emp Badge", "Kəsişən tarixlər", "Kəsişən gün sayı", "Əmrin növü", "Status"],
+  ];
   for (const g of groups) {
     const dateLines = g.orders
       .map((o) => `${formatSerial(o.start)} – ${formatSerial(o.end)}`)
       .join("\n");
-    const statusLines = g.orders.map((o) => o.type || "—").join("\n");
-    aoa.push([g.code, dateLines, statusLines]);
+    const dayLines = g.orders.map((o) => String(o.crossingDays)).join("\n");
+    const typeLines = g.orders.map((o) => o.type || "—").join("\n");
+    aoa.push([g.code, dateLines, dayLines, typeLines, `${g.pairs.length} Kəsişmə`]);
   }
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = [{ wch: 16 }, { wch: 34 }, { wch: 30 }];
+  ws["!cols"] = [{ wch: 14 }, { wch: 30 }, { wch: 16 }, { wch: 28 }, { wch: 14 }];
   // Enable wrap so the multi-line cells display as separate lines in Excel.
   const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
   for (let r = 1; r <= range.e.r; r++) {
-    for (const c of [1, 2]) {
+    for (const c of [1, 2, 3]) {
       const addr = XLSX.utils.encode_cell({ r, c });
       const cell = ws[addr];
       if (cell) cell.s = { alignment: { wrapText: true, vertical: "top" } };

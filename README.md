@@ -40,7 +40,17 @@ Bir fayl, 4 sheet:
 
 Bir sheet (`Dates` və ya ilk sheet), sütunlar: **A**=Personal kod, **B**=Növ, **C**=Tarixdən, **D**=Tarixə.
 
-Eyni işçi (Personal kod) üzrə tarix aralıqları kəsişən (üst-üstə düşən və ya sərhəd günü paylaşan) əmrlər tapılır. Kəsişmə şərti: `start₁ ≤ end₂ AND start₂ ≤ end₁`. Nəticə **3 sütunlu cədvəl** kimi, unikal işçi (Emp Badge) üzrə bir sətir: **Emp Badge**, **Kəsişən əmrlər və tarixləri** (bir xanada, hər əmr ayrı sətirdə) və **Status**. Yalnız kəsişən caseler göstərilir; nəticə eyni formada Excel-ə (`Result` sheet) export oluna bilər.
+Eyni işçi (Personal kod) üzrə tarix aralıqları kəsişən (üst-üstə düşən və ya sərhəd günü paylaşan) əmrlər tapılır. Kəsişmə şərti: `start₁ ≤ end₂ AND start₂ ≤ end₁`. Nəticə unikal işçi (Emp Badge) üzrə **bir sətir**, 5 sütun:
+
+| Sütun | Məzmun |
+|---|---|
+| Emp Badge | İşçinin kodu |
+| Kəsişən tarixlər | Kəsişən hər əmrin tarix aralığı (bir xanada, sətir-sətir) |
+| Kəsişən gün sayı | Hər əmrin digər əmrlərlə üst-üstə düşən gün sayı (birləşmə) |
+| Əmrin növü | Hər əmrin növü (məzuniyyət / ezamiyyə / overtime / xəstəlik və s.) |
+| Status | `N Kəsişmə` |
+
+Yalnız kəsişən caseler göstərilir; nəticə eyni formada Excel-ə (`Result` sheet) export oluna bilər.
 
 ## Absenteeism — davamiyyət
 

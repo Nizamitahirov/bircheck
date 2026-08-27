@@ -100,6 +100,18 @@ const t2 = [
   check("201 distinct orders = 2", g201?.orders.length === 2);
   // orders sorted by start
   check("200 orders sorted by start", g200 && g200.orders[0].start <= g200.orders[1].start);
+
+  // crossingDays: 200 orders sorted by start = (05-10),(06-07),(08-12)
+  //   (05-10): union with (06-07)->{6,7} and (08-12)->{8,9,10} = 5 days
+  //   (06-07): overlaps (05-10) -> {6,7} = 2 days
+  //   (08-12): overlaps (05-10) -> {8,9,10} = 3 days
+  const o200 = g200?.orders ?? [];
+  check("200 order[0] crossingDays = 5", o200[0]?.crossingDays === 5);
+  check("200 order[1] crossingDays = 2", o200[1]?.crossingDays === 2);
+  check("200 order[2] crossingDays = 3", o200[2]?.crossingDays === 3);
+  // 201: touching boundary at day 10 -> 1 shared day each
+  const o201 = g201?.orders ?? [];
+  check("201 both orders crossingDays = 1", o201[0]?.crossingDays === 1 && o201[1]?.crossingDays === 1);
   unlinkSync(tmp);
 }
 
