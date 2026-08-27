@@ -7,7 +7,6 @@ import {
   formatSerial,
   type CrossResult,
   type CrossGroup,
-  type Order,
 } from "@/lib/crosscheck";
 import { DownloadIcon, ErrorBox, FileDrop, PlayIcon, ProgressBar, Spinner, Stat } from "./ui";
 
@@ -81,8 +80,7 @@ export function CrossCheckTab() {
 
   const exportSelected = () => {
     if (!result) return;
-    const pairs = visibleGroups.flatMap((g) => g.pairs);
-    exportCrossCheck(result, `${fileBase()}_crosscheck_secilmis.xlsx`, pairs);
+    exportCrossCheck(result, `${fileBase()}_crosscheck_secilmis.xlsx`, visibleGroups);
   };
 
   return (
@@ -200,10 +198,21 @@ export function CrossCheckTab() {
                 Bu axtarışa uyğun işçi yoxdur.
               </div>
             ) : (
-              <div className="mt-4 space-y-4">
-                {visibleGroups.map((g) => (
-                  <GroupCard key={g.code} group={g} />
-                ))}
+              <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50">
+                    <tr className="text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-4 py-3">Emp Badge</th>
+                      <th className="px-4 py-3">Kəsişən əmrlər və tarixləri</th>
+                      <th className="px-4 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {visibleGroups.map((g) => (
+                      <GroupRow key={g.code} group={g} />
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </section>
@@ -213,50 +222,44 @@ export function CrossCheckTab() {
   );
 }
 
-function GroupCard({ group }: { group: CrossGroup }) {
+function GroupRow({ group }: { group: CrossGroup }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-2.5">
+    <tr className="align-top transition hover:bg-slate-50/60">
+      <td className="whitespace-nowrap px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-700">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-brand-700">
             <UserIcon />
           </span>
-          <span className="font-semibold text-slate-900">Badge {group.code}</span>
+          <span className="font-semibold tabular-nums text-slate-900">{group.code}</span>
         </div>
-        <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-800 ring-1 ring-inset ring-rose-200">
+        <span className="mt-1 ml-9 inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-800 ring-1 ring-inset ring-rose-200">
           {group.pairs.length} kəsişmə
         </span>
-      </div>
-      <div className="divide-y divide-slate-100">
-        {group.pairs.map((p, i) => (
-          <div
-            key={i}
-            className="flex flex-col items-stretch gap-2 px-4 py-3 md:flex-row md:items-center"
-          >
-            <OrderChip order={p.a} />
-            <div className="flex flex-shrink-0 items-center justify-center text-rose-400 md:px-1">
-              <CrossIcon />
-            </div>
-            <OrderChip order={p.b} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function OrderChip({ order }: { order: Order }) {
-  return (
-    <div className="flex flex-1 flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
-      <span className="inline-flex items-center rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-200">
-        {order.type || "—"}
-      </span>
-      <span className="text-sm font-medium tabular-nums text-slate-800">
-        {formatSerial(order.start)}
-        <span className="mx-1.5 text-slate-400">→</span>
-        {formatSerial(order.end)}
-      </span>
-    </div>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex flex-col gap-1.5">
+          {group.orders.map((o, i) => (
+            <span
+              key={i}
+              className="inline-flex w-fit items-center rounded-lg bg-slate-50 px-2.5 py-1 text-sm font-medium tabular-nums text-slate-800 ring-1 ring-inset ring-slate-200"
+            >
+              {formatSerial(o.start)}
+              <span className="mx-1.5 text-slate-400">→</span>
+              {formatSerial(o.end)}
+            </span>
+          ))}
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex flex-col gap-1.5">
+          {group.orders.map((o, i) => (
+            <span key={i} className="inline-flex min-h-[1.75rem] items-center text-sm text-slate-700">
+              {o.type || "—"}
+            </span>
+          ))}
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -294,19 +297,3 @@ function UserIcon() {
   );
 }
 
-function CrossIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </svg>
-  );
-}

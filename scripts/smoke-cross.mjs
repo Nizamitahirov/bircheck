@@ -95,6 +95,11 @@ const t2 = [
   check("202 not in results (no crossing)", !g202);
   check("employeesWithCross = 2", res.employeesWithCross === 2);
   check("total pairs = 3", res.pairs.length === 3);
+  // 200 has 3 distinct orders all involved in crossings
+  check("200 distinct orders = 3", g200?.orders.length === 3);
+  check("201 distinct orders = 2", g201?.orders.length === 2);
+  // orders sorted by start
+  check("200 orders sorted by start", g200 && g200.orders[0].start <= g200.orders[1].start);
   unlinkSync(tmp);
 }
 

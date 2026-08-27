@@ -19,6 +19,7 @@ export interface CrossPair {
 export interface CrossGroup {
   code: string;
   pairs: CrossPair[];
+  orders: Order[]; // distinct orders involved in any crossing, sorted by start
 }
 
 export interface CrossResult {
@@ -156,66 +157,29 @@ export async function processCrossCheck(
     // Sort by start asc, then end asc (matches filter_data: key1 A, key2 C).
     orders.sort((a, b) => a.start - b.start || a.end - b.end);
     const pairs: CrossPair[] = [];
+    const involved = new Map<string, Order>();
     for (let i = 0; i < orders.length; i++) {
       for (let t = i + 1; t < orders.length; t++) {
         if (crosses(orders[i], orders[t])) {
           const pair: CrossPair = { code, a: orders[i], b: orders[t] };
           pairs.push(pair);
           allPairs.push(pair);
+          involved.set(`${orders[i].start}|${orders[i].end}|${orders[i].type}`, orders[i]);
+          involved.set(`${orders[t].start}|${orders[t].end}|${orders[t].type}`, orders[t]);
         }
       }
     }
-    if (pairs.length) groups.push({ code, pairs });
+    if (pairs.length) {
+      const distinct = Array.from(involved.values()).sort(
+        (a, b) => a.start - b.start || a.end - b.end,
+      );
+      groups.push({ code, pairs, orders: distinct });
+    }
   }
 
   onProgress("Nəticə hazırlanır...", 85);
 
-  // Build/replace a Result sheet mirroring the crossings.
-  const resultAoa: Row[] = [
-    [
-      "Employee Badge",
-      "Status 1",
-      "Tarixdən 1",
-      "Tarixə 1",
-      "Status 2",
-      "Tarixdən 2",
-      "Tarixə 2",
-    ],
-  ];
-  for (const p of allPairs) {
-    resultAoa.push([
-      p.code,
-      p.a.type,
-      p.a.start,
-      p.a.end,
-      p.b.type,
-      p.b.start,
-      p.b.end,
-    ]);
-  }
-  const resultWs = XLSX.utils.aoa_to_sheet(resultAoa);
-  resultWs["!cols"] = [
-    { wch: 16 },
-    { wch: 22 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 22 },
-    { wch: 14 },
-    { wch: 14 },
-  ];
-  // Format date columns (indices 2,3,5,6).
-  const range = XLSX.utils.decode_range(resultWs["!ref"] ?? "A1");
-  for (let r = 1; r <= range.e.r; r++) {
-    for (const c of [2, 3, 5, 6]) {
-      const addr = XLSX.utils.encode_cell({ r, c });
-      const cell = resultWs[addr];
-      if (cell && typeof cell.v === "number") {
-        cell.t = "n";
-        cell.z = "dd.mm.yyyy";
-      }
-    }
-  }
-  wb.Sheets["Result"] = resultWs;
+  wb.Sheets["Result"] = buildResultSheet(groups);
   if (!wb.SheetNames.includes("Result")) wb.SheetNames.push("Result");
 
   onProgress("Tamamlandı", 100);
@@ -231,48 +195,40 @@ export async function processCrossCheck(
   };
 }
 
+// Result sheet: one row per unique Employee Badge.
+//   A = Emp Badge
+//   B = Kəsişən əmrlər və tarixləri (one order per line, in a single cell)
+//   C = Status (aligned, one status per line)
+function buildResultSheet(groups: CrossGroup[]): XLSX.WorkSheet {
+  const aoa: Row[] = [["Emp Badge", "Kəsişən əmrlər və tarixləri", "Status"]];
+  for (const g of groups) {
+    const dateLines = g.orders
+      .map((o) => `${formatSerial(o.start)} – ${formatSerial(o.end)}`)
+      .join("\n");
+    const statusLines = g.orders.map((o) => o.type || "—").join("\n");
+    aoa.push([g.code, dateLines, statusLines]);
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = [{ wch: 16 }, { wch: 34 }, { wch: 30 }];
+  // Enable wrap so the multi-line cells display as separate lines in Excel.
+  const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
+  for (let r = 1; r <= range.e.r; r++) {
+    for (const c of [1, 2]) {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const cell = ws[addr];
+      if (cell) cell.s = { alignment: { wrapText: true, vertical: "top" } };
+    }
+  }
+  return ws;
+}
+
 export function exportCrossCheck(
   result: CrossResult,
   filename: string,
-  override?: CrossPair[],
+  override?: CrossGroup[],
 ) {
-  const pairs = override ?? result.pairs;
-  const aoa: Row[] = [
-    [
-      "Employee Badge",
-      "Status 1",
-      "Tarixdən 1",
-      "Tarixə 1",
-      "Status 2",
-      "Tarixdən 2",
-      "Tarixə 2",
-    ],
-  ];
-  for (const p of pairs) {
-    aoa.push([p.code, p.a.type, p.a.start, p.a.end, p.b.type, p.b.start, p.b.end]);
-  }
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = [
-    { wch: 16 },
-    { wch: 22 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 22 },
-    { wch: 14 },
-    { wch: 14 },
-  ];
-  const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
-  for (let r = 1; r <= range.e.r; r++) {
-    for (const c of [2, 3, 5, 6]) {
-      const addr = XLSX.utils.encode_cell({ r, c });
-      const cell = ws[addr];
-      if (cell && typeof cell.v === "number") {
-        cell.t = "n";
-        cell.z = "dd.mm.yyyy";
-      }
-    }
-  }
-  result.workbook.Sheets["Result"] = ws;
+  const groups = override ?? result.groups;
+  result.workbook.Sheets["Result"] = buildResultSheet(groups);
   if (!result.workbook.SheetNames.includes("Result")) result.workbook.SheetNames.push("Result");
   XLSX.writeFile(result.workbook, filename, { compression: true });
 }
